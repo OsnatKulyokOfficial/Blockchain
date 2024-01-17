@@ -1,15 +1,20 @@
 
 from ast import While
+from bz2 import decompress
 import hashlib
 import json
+import requests
 
 from time import time
 from uuid import uuid4
+from urllib.parse import urlparse
+
 
 
 class Blockchain(object):
     def __init__(self):
         self.chain = []
+        self.nodes = set()
         self.current_transactions = []
         
         #create a genesis(ראשוני) block
@@ -92,6 +97,19 @@ class Blockchain(object):
         return self.chain[-1]
 
 
+    def register_node(self, address):
+        """
+            Adds a new node to the list of nodes
+            :param adress: <str> Address of node. 
+            Eg. 'http://192.168.0.5:5000'
+            
+            :return: None
+        """
+        
+        parsed_url = urlparse(address)
+        self.nodes.add(parsed_url.netloc)
+
+
 
     def proof_of_work(self, last_proof):
         """
@@ -125,3 +143,68 @@ class Blockchain(object):
         guess_hash = hashlib.sha256(guess).hexdigest()
         
         return guess_hash[:4] == "0000"
+    
+    
+    def valid_chain(self, chain):
+        """
+        Determine if a given blockchain is valid
+        
+        :parsm chain: <list> a Blockchain.
+        :return: <bool> True if the blockchain is valid, false if not.
+        """
+        
+        last_block = chain [0]
+        current_index = 1
+        
+        while current_index < len(chain):
+            block = chain[current_index]
+            print(f'{last_block}')
+            print('{block}')
+            print ('\n-----------\n')
+            #check that the hash of the block is correct 
+            if block['previous_hash'] != self.hash(last_block):
+                return False
+            
+            #Check that the proof of Work is correct
+            if not self.valid_proof(last_block['proof'], block['proof']):
+                return False 
+            
+            last_block = block 
+            current_index += 1
+        return True
+    
+    
+    def resolve_conflicts(self):
+        """"
+        This is our Consensus Algorithm, 
+        it resolves conflicts by replacing 
+        our chain with the longest one in the network.
+        
+        :return: <bool> True if our chain was replaced, False otherwise.
+        """        
+        
+        neighbours = self.nodes
+        new_chain = None
+        
+        #We're only looking for chains from all the nodes in our network. 
+        max_length = len(self.chain)
+        
+        #Grab and verify the chains from all the nodes in our network.
+        for node in neighbours:
+            response = requests.get(f'http://{node}/chain')
+            
+            if response.status_code == 200:
+                length = response.json()['length']
+                chain = response.json()['chain']
+                
+                #Check if the length is longer and the chain is valid. 
+                if length > max_length and self.valid_chain(chain):
+                    max_length = length
+                    new_chain = chain
+                    
+        #Replace our chain if we discovered a new, valid chain longer then ours.  
+        if new_chain:
+            self.chain= new_chain
+            return True
+        
+        return False

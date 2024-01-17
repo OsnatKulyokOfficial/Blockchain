@@ -17,6 +17,10 @@ node_identifier = str(uuid4()).replace('_', "")
 #Instantiate the Blockchain
 blockchain = Blockchain()
 
+@app.route('/')
+def home():
+    return "Welcome to the Blockchain Application"
+
 @app.route('/mine', methods=['GET'])
 def mine():
     # `blockchain.last_block`: Retrieves the last block in the blockchain.
